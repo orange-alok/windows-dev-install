@@ -183,9 +183,13 @@ try {
     }
     $isoUrl = "https://releases.ubuntu.com/$latestRelease/$isoLink"
     $downloadPath = Join-Path $env:USERPROFILE "Downloads\$isoLink"
-    Write-Host "Downloading Ubuntu ISO from $isoUrl ..."
-    Invoke-WebRequest -Uri $isoUrl -OutFile $downloadPath -UseBasicParsing
-    Write-Host "Ubuntu ISO downloaded to $downloadPath" -ForegroundColor Green
+    if (-not (Test-Path $downloadPath)) {
+        Write-Host "Downloading Ubuntu ISO from $isoUrl ..."
+        Invoke-WebRequest -Uri $isoUrl -OutFile $downloadPath -UseBasicParsing
+        Write-Host "Ubuntu ISO downloaded to $downloadPath" -ForegroundColor Green
+    } else {
+        Write-Host "Ubuntu ISO already exists at $downloadPath . Skipping download." -ForegroundColor Green
+    }
 } catch {
     Write-Warning "Failed to automatically download Ubuntu ISO: $_.Exception.Message"
     Write-Warning "You can download it manually from https://ubuntu.com/download/desktop"
@@ -202,7 +206,7 @@ if (-not (Test-Path $vboxManage)) {
         $vmName = "UbuntuVM$i"
         Write-Host "\n--- Creating $vmName ---" -ForegroundColor Cyan
         # Skip if VM already exists
-        & $vboxManage list vms | Select-String "\"$vmName\"" -Quiet
+        & $vboxManage list vms | Select-String -Pattern $vmName -SimpleMatch -Quiet
         if ($LASTEXITCODE -eq 0) {
             Write-Host "$vmName already exists. Skipping creation." -ForegroundColor Yellow
             continue
@@ -217,7 +221,7 @@ if (-not (Test-Path $vboxManage)) {
         # Unattended installation (VirtualBox 7+)
         Write-Host "Starting unattended installation for $vmName ..." -ForegroundColor Cyan
         & $vboxManage unattended install $vmName `
-            --user ubuntu --password . `
+            --user ubuntu --password "P@ssw0rd" `
             --full-user-name "Ubuntu User" `
             --hostname $vmName `
             --iso $downloadPath `
@@ -227,7 +231,7 @@ if (-not (Test-Path $vboxManage)) {
             --start-vm=headless
 
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "$vmName creation started (running headless). It will take a few minutes to finish first boot and installation." -ForegroundColor Green
+            Write-Host "$vmName creation started (running headless). It will take a few minutes to finish installation." -ForegroundColor Green
         } else {
             Write-Warning "Failed to start unattended install for $vmName. You can try manual creation later via VirtualBox GUI."
         }
@@ -236,5 +240,5 @@ if (-not (Test-Path $vboxManage)) {
 
 # --- Final message ---
 Write-Host "--------------------------------------------------" -ForegroundColor Green
-Write-Host "Automation complete. Rust toolchain, Node.js, Ubuntu ISO download, and VM creation steps have been executed." -ForegroundColor Green
-Write-Host "If Ubuntu VMs are still installing, you can monitor them with 'VBoxManage list runningvms'." -ForegroundColor Yellow
+Write-Host "Automation complete. Rust toolchain, Node.js, Ubuntu ISO download, and VM creation steps have executed." -ForegroundColor Green
+Write-Host "If Ubuntu VMs are still installing, monitor them with 'VBoxManage list runningvms'." -ForegroundColor Yellow
