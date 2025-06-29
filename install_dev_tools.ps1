@@ -111,24 +111,9 @@ foreach ($pkg in $packages) {
         Write-Host "Cannot install Docker Desktop because WSL is not enabled. Please enable it and restart." -ForegroundColor Red
         continue
     }
-
-    $arguments = @(
-        "install",
-        "-e",
-        "--id", $pkg.id,
-        "--silent",
-        "--disable-interactivity",
-        "--accept-source-agreements",
-        "--accept-package-agreements"
-    )
     
-    # Add override arguments if they exist for the package
-    if ($pkg.PSObject.Properties['override']) {
-        $arguments += "--override", $pkg.override
-    }
-
-    Write-Host "Running: winget $($arguments -join ' ')"
-    Start-Process winget -ArgumentList $arguments -Wait -NoNewWindow
+    Write-Host "Running: winget install -e --id $($pkg.id) --accept-source-agreements --accept-package-agreements"
+    winget install -e --id $pkg.id --accept-source-agreements --accept-package-agreements
     
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Failed to install $($pkg.name)." -ForegroundColor Red
