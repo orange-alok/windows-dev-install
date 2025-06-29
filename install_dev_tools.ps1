@@ -99,7 +99,7 @@ foreach ($pkg in $packages) {
     Write-Host "Installing $($pkg.name)..." -ForegroundColor Cyan
     
     # Check if package is already installed
-    $install_check = winget list --id $pkg.id -n 1
+    $install_check = winget list --id $pkg.id -n 1 | Select-String -Pattern $pkg.id -SimpleMatch -Quiet
     if ($install_check) {
         Write-Host "$($pkg.name) is already installed. Skipping." -ForegroundColor Green
         continue
