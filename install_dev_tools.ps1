@@ -98,9 +98,9 @@ try {
 foreach ($pkg in $packages) {
     Write-Host "Installing $($pkg.name)..." -ForegroundColor Cyan
     
-    # Check if package is already installed
-    $install_check = winget list --id $pkg.id -n 1 | Select-String -Pattern $pkg.id -SimpleMatch -Quiet
-    if ($install_check) {
+    # Check if package is already installed (winget returns exit code 0 if found, 2 if not)
+    winget list --id $pkg.id -n 1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
         Write-Host "$($pkg.name) is already installed. Skipping." -ForegroundColor Green
         continue
     }
