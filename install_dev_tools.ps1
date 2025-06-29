@@ -205,11 +205,21 @@ if (-not (Test-Path $vboxManage)) {
     for ($i = 1; $i -le 2; $i++) {
         $vmName = "UbuntuVM$i"
         Write-Host "\n--- Creating $vmName ---" -ForegroundColor Cyan
-        # Skip if VM already exists
-        & $vboxManage list vms | Select-String -Pattern $vmName -SimpleMatch -Quiet
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "$vmName already exists. Skipping creation." -ForegroundColor Yellow
-            continue
+        # If VM already exists, power it off (if running) and delete
+        $exists = & $vboxManage list vms | Select-String -Pattern $vmName -SimpleMatch -Quiet
+        if ($exists) {
+            $confirm = Read-Host "$vmName already exists. Delete and recreate it? (y/n)"
+            if ($confirm -ne 'y') {
+                Write-Host "Skipping $vmName as per user choice." -ForegroundColor Yellow
+                continue
+            }
+            Write-Host "Deleting existing $vmName ..." -ForegroundColor Yellow
+            # Attempt to power off if it is running
+            & $vboxManage list runningvms | Select-String -Pattern $vmName -SimpleMatch -Quiet
+            if ($LASTEXITCODE -eq 0) {
+                & $vboxManage controlvm $vmName poweroff
+            }
+            & $vboxManage unregistervm $vmName --delete
         }
 
         # Create the VM container
