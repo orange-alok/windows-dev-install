@@ -7,7 +7,7 @@
 # 1. Open PowerShell as an Administrator.
 # 2. Navigate to the directory where you saved this script.
 # 3. If you get an error about scripts being disabled on your system, run:
-#    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+#    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 # 4. Run the script: .\install_dev_tools.ps1
 
 # --- Configuration: Add or remove tools here ---
@@ -72,7 +72,7 @@ try {
     $choice = Read-Host "Do you want this script to run 'wsl --update' for you? (y/n)"
     if ($choice -eq 'y') {
         Write-Host "Running 'wsl --update'..."
-        wsl --update
+        wsl --update --web-download
         if ($LASTEXITCODE -eq 0) {
             Write-Host "WSL update completed. The script will now try to set WSL 2 as the default version again." -ForegroundColor Green
             Write-Host "If the update requires a restart, please do so and then re-run this script." -ForegroundColor Yellow
