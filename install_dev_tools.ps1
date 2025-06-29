@@ -233,7 +233,7 @@ if (-not (Test-Path $vboxManage)) {
         & $vboxManage unattended install $vmName `
             --user ubuntu --password "P@ssw0rd" `
             --full-user-name "Ubuntu User" `
-            --hostname $vmName `
+            --hostname "$vmName.local" `
             --iso $downloadPath `
             --locale en_US `
             --time-zone UTC `
