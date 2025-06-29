@@ -122,27 +122,104 @@ foreach ($pkg in $packages) {
     }
 }
 
-# --- Post-installation instructions ---
+# --- Automated Post-installation Actions ---
+Write-Host "Running automated post-installation steps..." -ForegroundColor Cyan
+
+# 1. Update Rust toolchain via rustup
+$rutool = Join-Path $env:USERPROFILE ".cargo\bin\rustup.exe"
+if (Test-Path $rutool) {
+    Write-Host "Updating Rust toolchain (rustup update)..." -ForegroundColor Cyan
+    & $rutool update stable
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Rust toolchain updated." -ForegroundColor Green
+    } else {
+        Write-Warning "rustup update failed. You can run it manually later."
+    }
+} else {
+    Write-Warning "rustup.exe not found. Rust might not have installed correctly or a restart is required before it is available in PATH."
+}
+
+# 2. Install latest Node.js via nvm-windows
+$nvmExe = "C:\Program Files\nvm\nvm.exe"
+if (Test-Path $nvmExe) {
+    Write-Host "Installing latest Node.js via nvm-windows..." -ForegroundColor Cyan
+    & $nvmExe install latest
+    if ($LASTEXITCODE -eq 0) {
+        & $nvmExe use latest
+        Write-Host "Latest Node.js installed and activated." -ForegroundColor Green
+    } else {
+        Write-Warning "nvm failed to install Node.js. You can run 'nvm install lts' manually later."
+    }
+} else {
+    Write-Warning "nvm.exe not found. NVM for Windows may require a new terminal session before it is available."
+}
+
+# 3. Download latest Ubuntu Desktop ISO for VirtualBox
+Write-Host "Attempting to download latest Ubuntu Desktop ISO..." -ForegroundColor Cyan
+try {
+    $releasesPage = Invoke-WebRequest -Uri "https://releases.ubuntu.com/" -UseBasicParsing -ErrorAction Stop
+    $releaseDirs = $releasesPage.Links | Where-Object { $_.href -match '^[0-9]{2}\.[0-9]{2}/$' } | ForEach-Object { $_.href.TrimEnd('/') }
+    $latestRelease = ($releaseDirs | Sort-Object { [double]$_ } -Descending)[0]
+
+    $isoPage = Invoke-WebRequest -Uri "https://releases.ubuntu.com/$latestRelease/" -UseBasicParsing -ErrorAction Stop
+    $isoLink = ($isoPage.Links | Where-Object { $_.href -match 'ubuntu-.*-desktop-amd64\.iso$' }).href | Select-Object -First 1
+    if (-not $isoLink) {
+        throw "ISO link not found on releases page."
+    }
+    $isoUrl = "https://releases.ubuntu.com/$latestRelease/$isoLink"
+    $downloadPath = Join-Path $env:USERPROFILE "Downloads\$isoLink"
+    Write-Host "Downloading Ubuntu ISO from $isoUrl ..."
+    Invoke-WebRequest -Uri $isoUrl -OutFile $downloadPath -UseBasicParsing
+    Write-Host "Ubuntu ISO downloaded to $downloadPath" -ForegroundColor Green
+} catch {
+    Write-Warning "Failed to automatically download Ubuntu ISO: $_.Exception.Message"
+    Write-Warning "You can download it manually from https://ubuntu.com/download/desktop"
+}
+
+# --- Create two isolated Ubuntu VMs using VirtualBox unattended install ---
+$vboxManage = Join-Path ${env:ProgramFiles} "Oracle\VirtualBox\VBoxManage.exe"
+if (-not (Test-Path $vboxManage)) {
+    Write-Warning "VBoxManage.exe not found. Ensure VirtualBox is installed and then re-run the script to create VMs."
+} elseif (-not (Test-Path $downloadPath)) {
+    Write-Warning "Ubuntu ISO not available. Skipping VM creation."
+} else {
+    for ($i = 1; $i -le 2; $i++) {
+        $vmName = "UbuntuVM$i"
+        Write-Host "\n--- Creating $vmName ---" -ForegroundColor Cyan
+        # Skip if VM already exists
+        & $vboxManage list vms | Select-String "\"$vmName\"" -Quiet
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "$vmName already exists. Skipping creation." -ForegroundColor Yellow
+            continue
+        }
+
+        # Create the VM container
+        & $vboxManage createvm --name $vmName --ostype Ubuntu_64 --register
+        
+        # Configure basic resources and isolation settings
+        & $vboxManage modifyvm $vmName --memory 8192 --cpus 6 --graphicscontroller vmsvga --nic1 nat --clipboard disabled --draganddrop disabled
+        
+        # Unattended installation (VirtualBox 7+)
+        Write-Host "Starting unattended installation for $vmName ..." -ForegroundColor Cyan
+        & $vboxManage unattended install $vmName `
+            --user ubuntu --password . `
+            --full-user-name "Ubuntu User" `
+            --hostname $vmName `
+            --iso $downloadPath `
+            --locale en_US `
+            --time-zone UTC `
+            --install-additions `
+            --start-vm=headless
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "$vmName creation started (running headless). It will take a few minutes to finish first boot and installation." -ForegroundColor Green
+        } else {
+            Write-Warning "Failed to start unattended install for $vmName. You can try manual creation later via VirtualBox GUI."
+        }
+    }
+}
+
+# --- Final message ---
 Write-Host "--------------------------------------------------" -ForegroundColor Green
-Write-Host "Installation script finished."
-Write-Host "Please read the following post-installation notes:" -ForegroundColor Yellow
-
-Write-Host "
-Rust:
-- The script installed 'rustup', the Rust toolchain installer.
-- Open a NEW terminal and run 'rustc --version' to verify installation.
-- The installer should have added the cargo bin directory to your PATH. If not, you may need to add '$HOME\.cargo\bin' manually.
-
-NVM for Windows:
-- The script installed 'nvm-windows'.
-- To install the latest LTS version of Node.js, open a NEW ADMINISTRATOR terminal and run:
-  nvm install lts
-  nvm use lts
-- You can verify with 'node -v'.
-
-Docker Desktop:
-- Docker Desktop might start automatically. If not, find it in the Start Menu.
-- On first run, it may prompt you to complete the WSL 2 kernel update. Please follow its instructions.
-"
-
-Write-Host "Setup complete. A final restart is recommended to ensure all changes are applied." -ForegroundColor Green 
+Write-Host "Automation complete. Rust toolchain, Node.js, Ubuntu ISO download, and VM creation steps have been executed." -ForegroundColor Green
+Write-Host "If Ubuntu VMs are still installing, you can monitor them with 'VBoxManage list runningvms'." -ForegroundColor Yellow
