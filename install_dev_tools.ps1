@@ -116,6 +116,7 @@ foreach ($pkg in $packages) {
         "install",
         "-e",
         "--id", $pkg.id,
+        "--silent",
         "--accept-source-agreements",
         "--accept-package-agreements"
     )
@@ -126,7 +127,7 @@ foreach ($pkg in $packages) {
     }
 
     Write-Host "Running: winget $($arguments -join ' ')"
-    & winget @arguments
+    Start-Process winget -ArgumentList $arguments -Wait -NoNewWindow
     
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Failed to install $($pkg.name)." -ForegroundColor Red
