@@ -1,0 +1,161 @@
+# Windows Development Environment Setup Script
+#
+# This script installs a set of common development tools on a fresh Windows machine.
+# It uses the winget package manager, which is included in modern versions of Windows.
+#
+# To run this script:
+# 1. Open PowerShell as an Administrator.
+# 2. Navigate to the directory where you saved this script.
+# 3. If you get an error about scripts being disabled on your system, run:
+#    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+# 4. Run the script: .\install_dev_tools.ps1
+
+# --- Configuration: Add or remove tools here ---
+$packages = @(
+    @{id="Microsoft.VisualStudioCode"; name="Visual Studio Code"},
+    @{id="Python.Python.3.9"; name="Python 3.9"; override='InstallAllUsers=1 PrependPath=1'},
+    @{id="Rustlang.Rustup"; name="Rust (via rustup)"},
+    @{id="Git.Git"; name="Git"},
+    @{id="Oracle.VirtualBox"; name="VirtualBox"},
+    @{id="Docker.DockerDesktop"; name="Docker Desktop"},
+    @{id="CoreyButler.NVMforWindows"; name="NVM for Windows"},
+    @{id="Mozilla.Firefox"; name="Firefox"},
+    @{id="Surfshark.Surfshark"; name="Surfshark"},
+    @{id="Valve.Steam"; name="Steam"}
+)
+
+# --- Main Script ---
+
+# Check if running as Administrator
+if (-Not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Warning "This script must be run as an Administrator. Please re-run this script in an elevated PowerShell session."
+    exit
+}
+
+Write-Host "Starting development environment setup..." -ForegroundColor Green
+
+# --- WSL and Docker ---
+Write-Host "Checking for Docker prerequisites (WSL 2)..." -ForegroundColor Cyan
+$wsl_feature = "Microsoft-Windows-Subsystem-Linux"
+$vm_platform_feature = "VirtualMachinePlatform"
+
+$wsl_status = Get-WindowsOptionalFeature -Online -FeatureName $wsl_feature
+if (-not $wsl_status.State -eq 'Enabled') {
+    Write-Host "Windows Subsystem for Linux (WSL) is not enabled. It is required for Docker Desktop."
+    Write-Host "This script can enable it for you, which will require a system restart."
+    $choice = Read-Host "Do you want to enable WSL and Virtual Machine Platform? (y/n)"
+    if ($choice -eq 'y') {
+        Write-Host "Enabling WSL and Virtual Machine Platform..."
+        dism.exe /online /enable-feature /featurename:$wsl_feature /all /norestart
+        dism.exe /online /enable-feature /featurename:$vm_platform_feature /all /norestart
+        Write-Host "WSL and Virtual Machine Platform have been enabled." -ForegroundColor Green
+        Write-Host "A RESTART IS REQUIRED for these changes to take effect." -ForegroundColor Yellow
+        Write-Host "After restarting, you may need to install a Linux distribution from the Microsoft Store (e.g., Ubuntu)."
+        Write-Host "Then, open PowerShell and run 'wsl --set-default-version 2' to set WSL 2 as the default."
+        Write-Host "Please restart your computer and then re-run this script to install Docker and other tools."
+        exit
+    } else {
+        Write-Host "Skipping WSL setup. Docker Desktop installation will be skipped." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "WSL seems to be enabled." -ForegroundColor Green
+}
+
+
+# --- Set WSL 2 as default ---
+Write-Host "Attempting to set WSL 2 as the default version..." -ForegroundColor Cyan
+try {
+    wsl --set-default-version 2
+    Write-Host "WSL 2 has been set as the default version." -ForegroundColor Green
+} catch {
+    Write-Warning "Failed to set WSL 2 as default. This is often because the WSL kernel is not installed."
+    $choice = Read-Host "Do you want this script to run 'wsl --update' for you? (y/n)"
+    if ($choice -eq 'y') {
+        Write-Host "Running 'wsl --update'..."
+        wsl --update
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "WSL update completed. The script will now try to set WSL 2 as the default version again." -ForegroundColor Green
+            Write-Host "If the update requires a restart, please do so and then re-run this script." -ForegroundColor Yellow
+            try {
+                wsl --set-default-version 2
+                Write-Host "Successfully set WSL 2 as the default version after the update." -ForegroundColor Green
+            } catch {
+                Write-Warning "Still failed to set WSL 2 as default after update. A restart is likely required."
+                Write-Warning "Please restart your computer and then re-run this script."
+                exit
+            }
+        } else {
+            Write-Warning "Failed to run 'wsl --update'. Please run it manually from an Administrator PowerShell."
+            Write-Warning "You can download the kernel manually from: https://aka.ms/wsl2kernel"
+        }
+    } else {
+        Write-Warning "Skipping WSL kernel update. Docker Desktop installation will likely fail."
+    }
+}
+
+
+# --- Install Packages ---
+foreach ($pkg in $packages) {
+    Write-Host "Installing $($pkg.name)..." -ForegroundColor Cyan
+    
+    # Check if package is already installed
+    $install_check = winget list --id $pkg.id -n 1
+    if ($install_check) {
+        Write-Host "$($pkg.name) is already installed. Skipping." -ForegroundColor Green
+        continue
+    }
+
+    # Docker has a dependency on WSL, so we check again.
+    $wsl_status_check = Get-WindowsOptionalFeature -Online -FeatureName $wsl_feature
+    if (($pkg.id -eq "Docker.DockerDesktop") -and (-not $wsl_status_check.State -eq 'Enabled')) {
+        Write-Host "Cannot install Docker Desktop because WSL is not enabled. Please enable it and restart." -ForegroundColor Red
+        continue
+    }
+
+    $arguments = @(
+        "install",
+        "-e",
+        "--id", $pkg.id,
+        "--accept-source-agreements",
+        "--accept-package-agreements"
+    )
+    
+    # Add override arguments if they exist for the package
+    if ($pkg.PSObject.Properties['override']) {
+        $arguments += "--override", $pkg.override
+    }
+
+    Write-Host "Running: winget $($arguments -join ' ')"
+    & winget @arguments
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Failed to install $($pkg.name)." -ForegroundColor Red
+    } else {
+        Write-Host "$($pkg.name) installed successfully." -ForegroundColor Green
+    }
+}
+
+# --- Post-installation instructions ---
+Write-Host "--------------------------------------------------" -ForegroundColor Green
+Write-Host "Installation script finished."
+Write-Host "Please read the following post-installation notes:" -ForegroundColor Yellow
+
+Write-Host "
+Rust:
+- The script installed 'rustup', the Rust toolchain installer.
+- Open a NEW terminal and run 'rustc --version' to verify installation.
+- The installer should have added the cargo bin directory to your PATH. If not, you may need to add '$HOME\.cargo\bin' manually.
+
+NVM for Windows:
+- The script installed 'nvm-windows'.
+- To install the latest LTS version of Node.js, open a NEW ADMINISTRATOR terminal and run:
+  nvm install lts
+  nvm use lts
+- You can verify with 'node -v'.
+
+Docker Desktop:
+- Docker Desktop might start automatically. If not, find it in the Start Menu.
+- On first run, it may prompt you to complete the WSL 2 kernel update. Please follow its instructions.
+"
+
+Write-Host "Setup complete. A final restart is recommended to ensure all changes are applied." -ForegroundColor Green 
