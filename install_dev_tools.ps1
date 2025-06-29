@@ -117,6 +117,7 @@ foreach ($pkg in $packages) {
         "-e",
         "--id", $pkg.id,
         "--silent",
+        "--disable-interactivity",
         "--accept-source-agreements",
         "--accept-package-agreements"
     )
