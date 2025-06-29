@@ -140,9 +140,24 @@ if (Test-Path $rutool) {
 }
 
 # 2. Install latest Node.js via nvm-windows
-$nvmExe = "C:\Program Files\nvm\nvm.exe"
-if (Test-Path $nvmExe) {
-    Write-Host "Installing latest Node.js via nvm-windows..." -ForegroundColor Cyan
+# Detect nvm.exe
+$nvmExe = $null
+$nvmCmd = Get-Command "nvm.exe" -ErrorAction SilentlyContinue
+if ($nvmCmd) {
+    $nvmExe = $nvmCmd.Path
+} else {
+    $possibleNvm = @(
+        "C:\Program Files\nvm\nvm.exe",
+        "$env:LOCALAPPDATA\Programs\nvm\nvm.exe",
+        "$env:APPDATA\nvm\nvm.exe"
+    )
+    foreach ($p in $possibleNvm) {
+        if (Test-Path $p) { $nvmExe = $p; break }
+    }
+}
+
+if ($nvmExe) {
+    Write-Host "Installing latest Node.js via nvm-windows (using $nvmExe)..." -ForegroundColor Cyan
     & $nvmExe install latest
     if ($LASTEXITCODE -eq 0) {
         & $nvmExe use latest
@@ -151,7 +166,7 @@ if (Test-Path $nvmExe) {
         Write-Warning "nvm failed to install Node.js. You can run 'nvm install lts' manually later."
     }
 } else {
-    Write-Warning "nvm.exe not found. NVM for Windows may require a new terminal session before it is available."
+    Write-Warning "nvm.exe not found. NVM for Windows may require a system logoff/logon before it is available in PATH, or the installation path may differ."
 }
 
 # 3. Download latest Ubuntu Desktop ISO for VirtualBox
